@@ -1,0 +1,54 @@
+!pip install flask-ngrok transformers sentencepiece torch pyngrok --quiet
+
+from flask import Flask, request, jsonify
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+from pyngrok import ngrok
+import torch
+
+# ngrok 인증 토큰 설정 (여기에 본인의 authtoken 입력)
+ngrok.set_auth_token("@@@")  # ✅ 올바르게 설정
+
+# 모델 로드
+model_name = "facebook/nllb-200-distilled-600M" #=>이걸로 모델 설정
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForSeq2SeqLM.from_pretrained(model_name).to("cuda")
+
+# Flask 서버 시작
+app = Flask(__name__)
+
+@app.route('/translate', methods=['POST'])
+def translate_text():
+    data = request.json
+    text = data.get("text", "")
+    src_lang = data.get("src_lang", "eng_Latn")  # 원본 언어 (기본값: 영어)
+    tgt_lang = data.get("tgt_lang", "kor_Hang")  # 대상 언어 (기본값: 한국어)
+
+    # 입력 텍스트와 언어 코드 결합
+    input_text = f">>{src_lang}<< {text} >>{tgt_lang}<<"
+      
+    # 텍스트 토크나이징
+    inputs = tokenizer(input_text, return_tensors="pt").to("cuda")
+    
+    # 텍스트 생성 (번역)
+    output = model.generate(**inputs)
+    
+    # 번역된 텍스트 디코딩
+    translated_text = tokenizer.decode(output[0], skip_special_tokens=True)
+
+    response = {"translatedText": translated_text}
+
+    # 응답 출력 (디버깅용)
+    print(response)  # 응답 확인
+
+    return jsonify(response)
+
+if __name__ == '__main__':
+    # ngrok을 사용하여 Flask 앱을 외부에서 접근 가능하게 설정
+    public_url = ngrok.connect(5000)
+    print(f" * ngrok tunnel \"{public_url}\" -> \"http://127.0.0.1:5000\"")
+    
+    # Flask 앱 실행
+    app.run(port=5000)
+
+
+##실행된 api를 복사 붙여넣기 하여 nllb Translator에 추가해야합니다!
